@@ -6,7 +6,6 @@ from pathlib import Path
 
 import numpy as np
 
-
 SAFE_NAMES = {
     "sin": np.sin, "cos": np.cos, "tan": np.tan,
     "asin": np.arcsin, "acos": np.arccos, "atan": np.arctan,
@@ -17,6 +16,9 @@ SAFE_NAMES = {
 }
 
 SUBSCRIPTS = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+
+PARAMETER_COUNT = 20
+PARAMETER_NAMES = [f"p{i}" for i in range(1, PARAMETER_COUNT + 1)]
 
 
 def split_top_level(text, sep=","):
@@ -81,9 +83,8 @@ def parse_time_range(raw):
     return t_start, t_end
 
 
-def parse_equations(raw):
-    body = strip_lhs(raw).replace("^", "**")
-    exprs = split_top_level(body)
+def compile_equations(exprs):
+    """Compile+validate already-split equation strings; shared by parse_equations and load_system."""
     if not exprs:
         raise ValueError("No equations given.")
     codes = []
@@ -92,22 +93,37 @@ def parse_equations(raw):
             codes.append(compile(expr, f"<equation {index}>", "eval"))
         except SyntaxError as exc:
             raise ValueError(f"Equation {index} '{expr}' is not valid Python: {exc.msg}.") from None
-    allowed = set(SAFE_NAMES) | {"t", "y"} | {f"y{i + 1}" for i in range(len(exprs))}
+    allowed = set(SAFE_NAMES) | {"t", "y"} | {f"y{i + 1}" for i in range(len(exprs))} | set(PARAMETER_NAMES)
     for index, (expr, code) in enumerate(zip(exprs, codes), start=1):
         unknown = sorted(set(code.co_names) - allowed)
         if unknown:
             raise ValueError(
                 f"Equation {index} '{expr}' uses unknown name(s): {', '.join(unknown)}. "
-                f"Available: t, y, y1..y{len(exprs)}, {', '.join(sorted(SAFE_NAMES))}."
+                f"Available: t, y, y1..y{len(exprs)}, p1..p{PARAMETER_COUNT} for parameters, "
+                f"{', '.join(sorted(SAFE_NAMES))}."
             )
+    return codes
+
+
+def parse_equations(raw):
+    body = strip_lhs(raw).replace("^", "**")
+    exprs = split_top_level(body)
+    codes = compile_equations(exprs)
     return exprs, codes
 
 
-def check_equations(codes, t_start, y0):
-    """Evaluate each equation once at (t0, y0) to catch runtime errors before storing."""
+def check_equations(codes, t_start, y0, parameters=None):
+    """Evaluate each equation once at (t0, y0) to catch runtime errors before storing.
+
+    Parameters without a value yet default to a placeholder (1.0) so equations that
+    reference not-yet-defined parameters can still be validated and saved.
+    """
+    parameters = parameters or {}
     namespace_base = dict(SAFE_NAMES, t=t_start)
     for index in range(len(codes)):
         namespace_base[f"y{index + 1}"] = y0[index]
+    for name in PARAMETER_NAMES:
+        namespace_base[name] = parameters.get(name, 1.0)
     values = []
     for index, code in enumerate(codes):
         try:
@@ -191,9 +207,22 @@ def write_json(path, data):
     return True
 
 
-def main():
+def save_system(data, default="ivp.json"):
+    """Ask for a filename (with overwrite/rename/cancel) and store `data`. Returns the path or None."""
+    path = choose_output_path(default)
+    if path is None:
+        print("Nothing saved.")
+        return None
+    if write_json(path, data):
+        print(f"  ✓ Definition saved to '{path}'")
+        return path
+    return None
+
+
+def collect_system():
+    """Interactively prompt for time range, equations and y0, save them, and return the system dict."""
     print(
-        "This app collects and stores the definition of your IVP.\n"
+        "Please define your system of ordinary differential equations.\n"
         "In equation i, 'y' means yi; use y1, y2, ... to couple the equations.\n"
     )
     print("⎧ ẏ = f(t, y)\n⎨\n⎩ (t₀, y₀)\n")
@@ -202,7 +231,7 @@ def main():
         "Define the time range: (e.g. t=(0,1))\n> ", parse_time_range
     )
     exprs, codes = ask(
-        "Define f(t, y), one equation per comma: (e.g. y1+1, cos(y2)-1, y2^2+y3)\n> ",
+        f"Define f(t, y), one equation per comma: (e.g. y1+1, cos(y2)-1, y1^2+y3)\n Name parameters: p1..p{PARAMETER_COUNT}\n>",
         parse_equations,
     )
     count = len(exprs)
@@ -224,15 +253,124 @@ def main():
 
     print("\nStoring:\n" + render_system(exprs, y0, t_start, t_end) + "\n")
 
-    path = choose_output_path()
-    if path is None:
-        print("Nothing saved.")
-        return
+    data = {"t_start": t_start, "t_end": t_end, "equations": exprs, "y0": y0, "parameters": {}}
+    save_system(data)
+    return data
 
-    data = {"t_start": t_start, "t_end": t_end, "equations": exprs, "y0": y0}
-    if write_json(path, data):
-        print(f"  ✓ Definition saved to '{path}'")
+
+def parse_input_path(raw):
+    name = raw.strip().strip('"').strip("'")
+    if not name:
+        raise ValueError("File name must not be empty.")
+    if not name.lower().endswith(".json"):
+        name += ".json"
+    path = Path(name).expanduser()
+    if not path.exists():
+        raise ValueError(f"'{path}' does not exist.")
+    if path.is_dir():
+        raise ValueError(f"'{path}' is a directory.")
+    return path
+
+
+def load_system(path):
+    """Read a system definition from `path` and validate it exactly like fresh user input."""
+    try:
+        with path.open() as handle:
+            raw = json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Could not read '{path}': {exc}.") from None
+
+    try:
+        t_start = float(raw["t_start"])
+        t_end = float(raw["t_end"])
+        exprs = [str(expr).replace("^", "**") for expr in raw["equations"]]
+        y0 = [float(value) for value in raw["y0"]]
+        parameters = {name: float(value) for name, value in raw.get("parameters", {}).items()}
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f"'{path}' is not a valid system definition ({exc}).") from None
+
+    if t_start == t_end:
+        raise ValueError("Start and end time must differ.")
+    if len(y0) != len(exprs):
+        raise ValueError(
+            f"'{path}' has {len(y0)} initial value(s) for {len(exprs)} equation(s)."
+        )
+
+    codes = compile_equations(exprs)
+    check_equations(codes, t_start, y0, parameters)
+
+    return {"t_start": t_start, "t_end": t_end, "equations": exprs, "y0": y0, "parameters": parameters}
+
+
+def import_system():
+    """Interactively ask for a file and return the loaded, validated system dict."""
+    prompt = "Load which system definition? (e.g. ivp.json, or 'ls' to list)\n> "
+    while True:
+        try:
+            raw = input(prompt)
+        except (EOFError, KeyboardInterrupt):
+            print("\nAborted.")
+            sys.exit(0)
+        if raw.strip().lower() == "ls":
+            files = sorted(Path.cwd().glob("*.json"))
+            print(("  " + "\n  ".join(f.name for f in files)) if files else "  (no .json files here)")
+            print()
+            continue
+        try:
+            data = load_system(parse_input_path(raw))
+            break
+        except ValueError as exc:
+            print(f"  ✗ {exc} Please try again.\n")
+    print("\nLoaded:\n" + render_system(data["equations"], data["y0"], data["t_start"], data["t_end"]) + "\n")
+    return data
+
+
+def parse_parameter_name(name):
+    name = name.strip()
+    if name not in PARAMETER_NAMES:
+        raise ValueError(f"'{name}' is not a valid parameter name (use p1..p{PARAMETER_COUNT}).")
+    return name
+
+
+def load_parameters(path):
+    """Read just the 'parameters' section of a system JSON file."""
+    try:
+        with path.open() as handle:
+            raw = json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Could not read '{path}': {exc}.") from None
+    parameters = raw.get("parameters", {})
+    if not isinstance(parameters, dict):
+        raise ValueError(f"'{path}' has an invalid 'parameters' section.")
+    return {parse_parameter_name(name): float(value) for name, value in parameters.items()}
+
+
+def save_parameters(path, parameters):
+    """Merge `parameters` into an existing system file's 'parameters' section, revalidating first."""
+    try:
+        with path.open() as handle:
+            raw = json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Could not read '{path}': {exc}.") from None
+
+    existing = raw.get("parameters", {})
+    if not isinstance(existing, dict):
+        existing = {}
+    merged = {**existing, **parameters}
+
+    try:
+        t_start = float(raw["t_start"])
+        exprs = [str(expr).replace("^", "**") for expr in raw["equations"]]
+        y0 = [float(value) for value in raw["y0"]]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f"'{path}' is not a valid system definition ({exc}).") from None
+
+    codes = compile_equations(exprs)
+    check_equations(codes, t_start, y0, merged)
+
+    raw["parameters"] = merged
+    return write_json(path, raw)
 
 
 if __name__ == "__main__":
-    main()
+    collect_system()
