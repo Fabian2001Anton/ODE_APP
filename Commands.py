@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 
+import Draw
 import Input
 
 
@@ -11,6 +12,7 @@ class AppState:
 
     def __init__(self):
         self.system = None
+        self.diagram_path = None
         self.running = True
 
 
@@ -66,13 +68,60 @@ def cmd_plot(state, args):
 
 
 def cmd_display(state, args):
-    """Show the currently loaded system."""
-    print("  'display' is not implemented yet.")
+    """Compile a diagram .tex to a PDF and open it."""
+    default = state.diagram_path if state.diagram_path and state.diagram_path.exists() else None
+    hint = f", Enter for '{default.name}'" if default else ""
+    prompt = f"Which .tex file should I compile? ('ls' to list{hint})\n> "
+    while True:
+        try:
+            raw = input(prompt)
+        except (EOFError, KeyboardInterrupt):
+            print("\nAborted.")
+            return
+        if not raw.strip() and default:
+            path = default
+            break
+        if raw.strip().lower() == "ls":
+            files = sorted(Path.cwd().glob("*.tex"))
+            print(("  " + "\n  ".join(f.name for f in files)) if files else "  (no .tex files here)")
+            print()
+            continue
+        try:
+            path = Draw.parse_existing_tex(raw)
+            break
+        except ValueError as exc:
+            print(f"  ✗ {exc} Please try again.\n")
+
+    print(f"  Compiling '{path}' ...")
+    try:
+        pdf = Draw.compile_document(path)
+    except ValueError as exc:
+        print(f"  ✗ {exc}")
+        return
+    print(f"  ✓ Built '{pdf}'")
+    try:
+        Draw.open_document(pdf)
+    except ValueError as exc:
+        print(f"  ✗ {exc}")
 
 
 def cmd_name(state, args):
     """Show or change the system's name."""
     print("  'name' is not implemented yet.")
+
+
+def cmd_draw(state, args):
+    """Write a TikZ diagram of the loaded system to a .tex file."""
+    if state.system is None:
+        print("  ✗ No system loaded. Run 'input' first.")
+        return
+    print()
+    print(Draw.render_tikz(state.system))
+    print()
+    path = Draw.save_document(Draw.build_document(state.system))
+    if path is not None:
+        state.diagram_path = path
+        print(f"  ✓ Diagram saved to '{path}'")
 
 
 def parse_parameter_assignment(raw):
@@ -161,4 +210,5 @@ COMMANDS = {
     "display": cmd_display,
     "name": cmd_name,
     "parameters": cmd_parameters,
+    "draw": cmd_draw,
 }
