@@ -1,0 +1,10 @@
+# Data and output, not code
+Models/
+Diagrams/
+
+# Python caches
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store

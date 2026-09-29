@@ -183,8 +183,11 @@ def parse_filename(raw):
     return path
 
 
-def choose_output_path(default="ivp.json"):
-    path = ask(f"Save the definition as [{default}]:\n> ", parse_filename, default=Path(default))
+def choose_output_path(default="ivp.json", folder="Models"):
+    folder = Path(folder)
+    name = ask(f"Save the definition as [{default}]:\ninput > ", parse_filename, default=Path(default))
+    default = Path(default)
+    path = folder / name
     while path.exists():
         print(f"  ! '{path}' already exists.")
         choice = ask("  Overwrite, rename or cancel? [o/r/c]: ", parse_choice)
@@ -192,7 +195,7 @@ def choose_output_path(default="ivp.json"):
             return path
         if choice == "c":
             return None
-        path = ask("  New file name:\n> ", parse_filename)
+        path = ask("  New file name:\ninput > ", parse_filename)
     return path
 
 
@@ -228,10 +231,10 @@ def collect_system():
     print("⎧ ẏ = f(t, y)\n⎨\n⎩ (t₀, y₀)\n")
 
     t_start, t_end = ask(
-        "Define the time range: (e.g. t=(0,1))\n> ", parse_time_range
+        "Define the time range: (e.g. t=(0,1))\ninput > ", parse_time_range
     )
     exprs, codes = ask(
-        f"Define f(t, y), one equation per comma: (e.g. y1+1, cos(y2)-1, y1^2+y3)\n Name parameters: p1..p{PARAMETER_COUNT}\n>",
+        f"Define f(t, y), one equation per comma: (e.g. y1+1, cos(y2)-1, y1^2+y3)\n Name parameters: p1..p{PARAMETER_COUNT}\ninput >",
         parse_equations,
     )
     count = len(exprs)
@@ -247,7 +250,7 @@ def collect_system():
 
     example = ", ".join(str(i) for i in range(1, count + 1))
     y0 = ask(
-        f"Define y₀ = y({t_start}), {count} value(s): (e.g. ({example}))\n> ",
+        f"Define y₀ = y({t_start}), {count} value(s): (e.g. ({example}))\ninput > ",
         parse_initial,
     )
 
@@ -258,13 +261,13 @@ def collect_system():
     return data
 
 
-def parse_input_path(raw):
+def parse_input_path(raw, folder="."):
     name = raw.strip().strip('"').strip("'")
     if not name:
         raise ValueError("File name must not be empty.")
     if not name.lower().endswith(".json"):
         name += ".json"
-    path = Path(name).expanduser()
+    path = Path(folder) / Path(name).expanduser()
     if not path.exists():
         raise ValueError(f"'{path}' does not exist.")
     if path.is_dir():
@@ -302,9 +305,9 @@ def load_system(path):
     return {"t_start": t_start, "t_end": t_end, "equations": exprs, "y0": y0, "parameters": parameters}
 
 
-def import_system():
+def import_system(folder="Models"):
     """Interactively ask for a file and return the loaded, validated system dict."""
-    prompt = "Load which system definition? (e.g. ivp.json, or 'ls' to list)\n> "
+    prompt = "Load which system definition? (e.g. ivp.json, or 'ls' to list)\nType 'exit' to exit.\ninput > "
     while True:
         try:
             raw = input(prompt)
@@ -312,12 +315,14 @@ def import_system():
             print("\nAborted.")
             sys.exit(0)
         if raw.strip().lower() == "ls":
-            files = sorted(Path.cwd().glob("*.json"))
-            print(("  " + "\n  ".join(f.name for f in files)) if files else "  (no .json files here)")
+            files = sorted(Path(folder).glob("*.json"))
+            print(("  " + "\n  ".join(f.name for f in files)) if files else f"  (no .json files in '{folder}/')")
             print()
             continue
+        elif raw.strip().lower() == "exit":
+            break
         try:
-            data = load_system(parse_input_path(raw))
+            data = load_system(parse_input_path(raw, folder))
             break
         except ValueError as exc:
             print(f"  ✗ {exc} Please try again.\n")
@@ -347,6 +352,7 @@ def load_parameters(path):
 
 def save_parameters(path, parameters):
     """Merge `parameters` into an existing system file's 'parameters' section, revalidating first."""
+
     try:
         with path.open() as handle:
             raw = json.load(handle)

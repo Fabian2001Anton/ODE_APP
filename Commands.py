@@ -68,10 +68,11 @@ def cmd_plot(state, args):
 
 
 def cmd_display(state, args):
-    """Compile a diagram .tex to a PDF and open it."""
+    """Compile a diagram .tex from the Diagrams folder to a PDF and open it."""
+    folder = Path("Diagrams")
     default = state.diagram_path if state.diagram_path and state.diagram_path.exists() else None
     hint = f", Enter for '{default.name}'" if default else ""
-    prompt = f"Which .tex file should I compile? ('ls' to list{hint})\n> "
+    prompt = f"Which .tex file in '{folder}/' should I compile? ('ls' to list{hint}, 'exit' to exit)\ndisplay > "
     while True:
         try:
             raw = input(prompt)
@@ -82,12 +83,14 @@ def cmd_display(state, args):
             path = default
             break
         if raw.strip().lower() == "ls":
-            files = sorted(Path.cwd().glob("*.tex"))
-            print(("  " + "\n  ".join(f.name for f in files)) if files else "  (no .tex files here)")
-            print()
+            files = sorted(folder.glob("*.tex"))
+            print(("  " + "\n  ".join(f.name for f in files)) if files else f"  (no .tex files in '{folder}/')")
+            print("Exit with 'exit'\n")
             continue
+        elif raw.strip().lower() == "exit":
+            break
         try:
-            path = Draw.parse_existing_tex(raw)
+            path = Draw.parse_existing_tex(raw, folder)
             break
         except ValueError as exc:
             print(f"  ✗ {exc} Please try again.\n")
@@ -121,7 +124,7 @@ def cmd_draw(state, args):
     path = Draw.save_document(Draw.build_document(state.system))
     if path is not None:
         state.diagram_path = path
-        print(f"  ✓ Diagram saved to '{path}'")
+        print(f"  ✓ Diagram saved to '{path}' Press 'Enter' to proceed.")
 
 
 def parse_parameter_assignment(raw):
@@ -147,7 +150,8 @@ def print_parameters(parameters):
 
 def cmd_parameters(state, args):
     """View or set the parameter values stored in a system file."""
-    prompt = "Which system file holds the parameters? (e.g. ivp.json, or 'ls' to list)\n> "
+    folder = Path("Models")
+    prompt = "Which system file holds the parameters? (e.g. ivp.json, or 'ls' to list)\nType 'exit' to exit\n parameters> "
     while True:
         try:
             raw = input(prompt)
@@ -155,12 +159,14 @@ def cmd_parameters(state, args):
             print("\nAborted.")
             return
         if raw.strip().lower() == "ls":
-            files = sorted(Path.cwd().glob("*.json"))
+            files = sorted(folder.glob("*.json"))
             print(("  " + "\n  ".join(f.name for f in files)) if files else "  (no .json files here)")
             print()
             continue
+        elif raw.strip().lower() == "exit":
+            break
         try:
-            path = Input.parse_input_path(raw)
+            path = Input.parse_input_path(raw, folder)
             parameters = Input.load_parameters(path)
         except ValueError as exc:
             print(f"  ✗ {exc} Please try again.\n")
@@ -169,12 +175,12 @@ def cmd_parameters(state, args):
 
     print(f"\nCurrent parameters in '{path}':")
     print_parameters(parameters)
-    print("\nSet a value (e.g. p1=2.5), 'ls' to list current values, or 'done' to finish:")
+    print("\nSet a value (e.g. p1=2.5), 'ls' to list current values, 'cat' to read the .json file ,or 'done' to finish:")
 
     updates = {}
     while True:
         try:
-            raw = input("> ")
+            raw = input("parameters > ")
         except (EOFError, KeyboardInterrupt):
             print("\nAborted.")
             break
@@ -183,6 +189,9 @@ def cmd_parameters(state, args):
             break
         if command == "ls":
             print_parameters({**parameters, **updates})
+            continue
+        if command == "cat":
+            print(path.read_text().rstrip())
             continue
         try:
             name, value = parse_parameter_assignment(raw)

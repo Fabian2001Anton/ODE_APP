@@ -267,13 +267,13 @@ def parse_tex_filename(raw):
     return path
 
 
-def parse_existing_tex(raw):
+def parse_existing_tex(raw, folder="."):
     name = raw.strip().strip('"').strip("'")
     if not name:
         raise ValueError("File name must not be empty.")
     if not name.lower().endswith(".tex"):
         name += ".tex"
-    path = Path(name).expanduser()
+    path = Path(folder) / Path(name).expanduser()
     if not path.exists():
         raise ValueError(f"'{path}' does not exist.")
     if path.is_dir():
@@ -313,8 +313,11 @@ def open_document(path):
         raise ValueError(f"Could not open '{path}': {exc}") from None
 
 
-def save_document(text, default="ivp_diagram.tex"):
-    path = Input.ask(f"Save the diagram as [{default}]:\n> ", parse_tex_filename, default=Path(default))
+def save_document(text, default="ivp_diagram.tex", folder="Diagrams"):
+    folder = Path(folder)
+    name = Input.ask(f"Save the diagram as [{default}]:\ndraw > ", parse_tex_filename, default=Path(default))
+    default = Path(default)
+    path = folder / name
     while path.exists():
         print(f"  ! '{path}' already exists.")
         choice = Input.ask("  Overwrite, rename or cancel? [o/r/c]: ", Input.parse_choice)
@@ -323,7 +326,7 @@ def save_document(text, default="ivp_diagram.tex"):
         if choice == "c":
             print("Nothing saved.")
             return None
-        path = Input.ask("  New file name:\n> ", parse_tex_filename)
+        path = _in_own_folder(Input.ask("  New file name:\ndraw > ", parse_tex_filename))
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
