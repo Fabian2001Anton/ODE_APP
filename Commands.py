@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import json
 from pathlib import Path
 
 import Draw
@@ -132,11 +133,59 @@ def cmd_display(state, args):
     except ValueError as exc:
         print(f"  ✗ {exc}")
 
-
 def cmd_name(state, args):
-    """Show or change the system's name."""
-    print("  'name' is not implemented yet.")
+    """Name the equations"""
+    file_name = "".join(state.JSON_name.split())
+    path = Input.parse_input_path(file_name, "Models")
+    print(f"{file_name} is loaded.\npath: {path}\n")
 
+    data = json.loads(path.read_text())
+    variables = [f"y{i}" for i in range(1, len(data["equations"]) + 1)]
+    names = data.get("names", {})
+
+    print("\nSet a name (e.g. y1=\"drug concentration in blood\"), 'cat' to read the .json file, or 'done' to finish:")
+    updates = {}
+    while True:
+        try:
+            raw = input("name > ")
+        except (EOFError, KeyboardInterrupt):
+            print("\nAborted.")
+            break
+        command = raw.strip().lower()
+        if command == "done":
+            break
+        if command == "cat":
+            print(path.read_text().rstrip())
+            continue
+        variable, separator, value = raw.partition("=")
+        variable = variable.strip()
+        value = value.strip().strip('"').strip("'")
+        if not separator:
+            print("  ✗ Use the form y1=\"name\".")
+            continue
+        if variable not in variables:
+            print(f"  ✗ '{variable}' is not a variable (use y1..y{len(variables)}).")
+            continue
+        if not value:
+            value = f"variables {variable[1:]}"
+        updates[variable] = value
+        print(f"  ✓ {variable} = \"{value}\"")
+
+    if not updates:
+        print("No changes made.")
+        return
+
+    merged = {**names, **updates}
+    full = {variable: merged.get(variable) or f"equation {i}"
+            for i, variable in enumerate(variables, start=1)}
+
+    if full == names:
+        print("No changes made.")
+        return
+
+    data["names"] = full
+    if Input.write_json(path, data):
+        print(f"  ✓ Names saved to '{path}'")
 
 def cmd_draw(state, args):
     """Write a TikZ diagram of the loaded system to a .tex file."""

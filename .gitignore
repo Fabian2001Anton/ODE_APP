@@ -1,7 +1,7 @@
 # Data and output, not code
 Models/
 Diagrams/
-solutions.csv
+solutions/
 
 # Python caches
 __pycache__/
