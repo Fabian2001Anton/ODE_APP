@@ -182,7 +182,7 @@ def collect_arrows(equations):
     return arrows
 
 
-def latex(text):
+def latex(text): #transforms equations to Latex compileable code
     text = text.replace(" ** ", "^").replace(" * ", " ")
     text = re.sub(r"\b([yp])(\d+)\b", r"\1_{\2}", text)
     return f"${text}$"

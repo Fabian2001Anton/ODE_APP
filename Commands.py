@@ -64,7 +64,7 @@ def cmd_solve(state, args):
 
 def cmd_plot(state, args):
     """Plot the solution."""
-    print("  'plot' is not implemented yet.")
+    print(f"{state.system}  'plot' is not implemented yet.")
 
 
 def cmd_display(state, args):
@@ -150,7 +150,7 @@ def print_parameters(parameters):
 
 def cmd_parameters(state, args):
     """View or set the parameter values stored in a system file."""
-    folder = Path("Models")
+    folder = Path("Models") #Change this!!! the currently loaded systhem should be used
     prompt = "Which system file holds the parameters? (e.g. ivp.json, or 'ls' to list)\nType 'exit' to exit\n parameters> "
     while True:
         try:

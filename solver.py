@@ -12,7 +12,7 @@ SAFE_NAMES = {
     "asin": np.arcsin, "acos": np.arccos, "atan": np.arctan,
     "sinh": np.sinh, "cosh": np.cosh, "tanh": np.tanh,
     "exp": np.exp, "log": np.log, "log10": np.log10,
-    "sqrt": np.sqrt, "abs": np.abs, "sign": np.sign,
+    "sqrt": np.sqrt, 
     "pi": np.pi, "e": np.e,
 }
 
