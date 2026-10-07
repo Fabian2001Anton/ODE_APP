@@ -196,7 +196,7 @@ def choose_output_path(default="ivp.json", folder="Models"):
         if choice == "c":
             return None
         path = ask("  New file name:\ninput > ", parse_filename)
-    return path
+    return path, name
 
 
 def write_json(path, data):
@@ -212,13 +212,13 @@ def write_json(path, data):
 
 def save_system(data, default="ivp.json"):
     """Ask for a filename (with overwrite/rename/cancel) and store `data`. Returns the path or None."""
-    path = choose_output_path(default)
+    path, name = choose_output_path(default)
     if path is None:
         print("Nothing saved.")
         return None
     if write_json(path, data):
         print(f"  ✓ Definition saved to '{path}'")
-        return path
+        return name
     return None
 
 
@@ -257,8 +257,8 @@ def collect_system():
     print("\nStoring:\n" + render_system(exprs, y0, t_start, t_end) + "\n")
 
     data = {"t_start": t_start, "t_end": t_end, "equations": exprs, "y0": y0, "parameters": {}}
-    save_system(data)
-    return data
+    JSON_name = save_system(data)
+    return data, JSON_name
 
 
 def parse_input_path(raw, folder="."):
@@ -327,7 +327,7 @@ def import_system(folder="Models"):
         except ValueError as exc:
             print(f"  ✗ {exc} Please try again.\n")
     print("\nLoaded:\n" + render_system(data["equations"], data["y0"], data["t_start"], data["t_end"]) + "\n")
-    return data
+    return data, raw
 
 
 def parse_parameter_name(name):

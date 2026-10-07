@@ -1,6 +1,7 @@
 """Command handlers and registry for the interactive REPL."""
 
 import os
+import subprocess
 from pathlib import Path
 
 import Draw
@@ -13,6 +14,8 @@ class AppState:
     def __init__(self):
         self.system = None
         self.diagram_path = None
+        self.JSON_name = None
+        self.solution_file = None
         self.running = True
 
 
@@ -51,15 +54,37 @@ def cmd_input(state, args):
     mode = choose_mode()
     print()
     if mode == "i":
-        state.system = Input.import_system()
+        state.system, state.JSON_name = Input.import_system()
     else:
-        state.system = Input.collect_system()
+        state.system, state.JSON_name = Input.collect_system()
     print(state.system)
 
+def parse_filename_CSV(raw):
+    name = raw.strip().strip('"').strip("'")
+    if not name:
+        raise ValueError("File name must not be empty.")
+    if not name.lower().endswith(".csv"):
+        name += ".csv"
+    return name
+
+APP_DIR = Path(__file__).resolve().parent 
 
 def cmd_solve(state, args):
     """Solve the loaded system."""
-    print("  'solve' is not implemented yet.")
+    file_name = "".join(state.JSON_name.split())
+    if not file_name.endswith(".json"):
+        file_name += ".json"
+        state.JSON_name = file_name
+    print(f"{file_name} is loaded.")
+    output_file = Input.ask("The solution will be saved as csv\nChoose a name\nsolve > ", parse_filename_CSV)
+    print(output_file)
+    result = subprocess.run(["./radau.out", file_name, output_file], check=True, cwd=APP_DIR)
+    if result.returncode == 0:
+        print(f"Sucessfully saved to {output_file}\n")
+        state.solution_file = output_file
+    else:
+        print(f"Error C10{abs(result.returncode)}\n")
+        print(f"systhem state:\n{state.system}")
 
 
 def cmd_plot(state, args):
