@@ -8,6 +8,7 @@ from pathlib import Path
 import Draw
 import Input
 
+from plot import main_plot as plot_sol
 
 class AppState:
     """Shared state passed to every command handler."""
@@ -79,7 +80,10 @@ def cmd_solve(state, args):
     print(f"{file_name} is loaded.")
     output_file = Input.ask("The solution will be saved as csv\nChoose a name\nsolve > ", parse_filename_CSV)
     print(output_file)
-    result = subprocess.run(["./radau.out", file_name, output_file], check=True, cwd=APP_DIR)
+    try:
+        result = subprocess.run(["./radau.out", file_name, output_file], check=True, cwd=APP_DIR)
+    except:
+        print(f"\nRadau solver could not be imported.\nDoes './radau.out' exist in the directory {APP_DIR}")
     if result.returncode == 0:
         print(f"Sucessfully saved to {output_file}\n")
         state.solution_file = output_file
@@ -90,7 +94,23 @@ def cmd_solve(state, args):
 
 def cmd_plot(state, args):
     """Plot the solution."""
-    print(f"{state.system}  'plot' is not implemented yet.")
+    print("\nImport or generate a model first with the commmand 'input'.\nThen generate a solution with solve.")
+    print("\nChoose a solution for {state.JSON_name}\nSee avaliable solutions with 'ls'")
+    folder = "solutions"
+    try:
+        raw = input("\nplot >")
+    except (EOFError, KeyboardInterrupt):
+        print("\nAborted.")
+        return
+    if raw.strip().lower() == "ls":
+        files = sorted(folder.glob("*.csv"))
+        print(("  " + "\n  ".join(f.name for f in files)) if files else f"  (no .csv files in '{folder}/')")
+        return
+    sol_name = raw
+    try:
+        plot_sol(sol_name ,state.JSON_name)
+    except:
+        print("\nplot failed\nchoose a correct model and solution")
 
 
 def cmd_display(state, args):

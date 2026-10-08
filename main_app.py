@@ -9,6 +9,7 @@ LOGO = r"""
 : /___/     |___/_/       /____/\____/_/ |___/\___/_/         for Biocomputing           :
 :                                                                                        :
 :...........................................................by Fabian Anton Gottfried....:
+                                                               fabian@fabiangottfried.de
 """
 
 

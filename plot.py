@@ -8,7 +8,6 @@ class Settings:
 
     def __init__(self):
         self.equation_names = None
-        self.gridn = 2
         self.gridm = 4
         self.figsize = (9,6)
         self.ylabel = "y"
@@ -17,13 +16,16 @@ class Settings:
 
 
 def create_subplots(t, y, settings):
-    n, m = settings.gridn, settings.gridm
+    m =  settings.gridm #number of diagramms in one line
     d = settings.number_of_eq
+    n = -(-d // m)   # 3
+    if d < m:
+        m = d
     names = settings.equation_names
     if names == None:
         names = [f"variable {i+1}" for i in range(d)]
 
-    fig, axs = plt.subplots(n, m, figsize=settings.figsize)
+    fig, axs = plt.subplots(n, m, figsize=settings.figsize, squeeze=False)
     counter = 0
     for i in range(n):
         for j in range(m):
@@ -33,6 +35,8 @@ def create_subplots(t, y, settings):
                 axs[i,j].set_ylabel(settings.ylabel)
                 axs[i,j].legend()
                 counter+=1
+            else:
+                axs[i,j].axis("off")
 
     fig.tight_layout(h_pad=3, w_pad=2.5)
     return fig
@@ -47,7 +51,7 @@ def main_plot(cvs_name, json_name):
     path_json = Input.parse_input_path(file_name_json, "Models")
     data_json = json.loads(path_json.read_text())
     #set the settings 
-    settings = Settings()
+    settings = Settings() #neccesary so the class is known
     settings.number_of_eq = len(ys)
     names = data_json.get("names", {})
     settings.equation_names = [names.get(f"y{i}", f"equation {i}") for i in range(1, len(ys) + 1)]
@@ -55,4 +59,4 @@ def main_plot(cvs_name, json_name):
     plt.show()
     pass
 
-main_plot("oo.csv", "ivp.json")
+#main_plot("oo.csv", "ivp.json")
