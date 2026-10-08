@@ -1,5 +1,8 @@
 import re
 import sympy
+import pandas as pd
+
+from create_matrix_for_eq import main_create_matrix_for_eq as create_matrix
 
 class Settings:
     def __init__(self):
@@ -22,7 +25,7 @@ def render_tikz(equations, eq_names, settings):
     for index, name in enumerate(variables):
         box = f"$y_{{{index + 1}}}$"
         if index == 0:
-            lines.append(f"    \\node [block] ({name}) {{{box}}};")
+            lines.append(f"    \\node [block] ({name} ({eq_names[index]})) {{{box}}};")
         elif index % settings.ROW_LENGTH == 0:
             lines.append(f"    \\node [block, below of={variables[index - settings.ROW_LENGTH]}, "
                          f"node distance={settings.ROW_DISTANCE}] ({name}) {{{box}}};")
@@ -32,6 +35,34 @@ def render_tikz(equations, eq_names, settings):
     lines.append("")
 
     #arrows
+    
+    df = create_matrix(equations)
+
+    #the constant terms
+    const_col = df["constant"]
+    for index, name in enumerate(variables):
+            box = f"$y_{{{index + 1}}}$"
+            lines.append(f"\draw [->] ($(0.8cm,-1.5cm)+({{{box}}})node[above]{${{{const_col[index]}}}$} -- ({{{box}}});")
+
+    #the rest terms 
+    rest_col = df["rest"]
+    for index, name in enumerate(variables):
+        box = f"$y_{{{index + 1}}}$"
+        lines.append(f"\draw [->] ($(0.8cm,1.5cm)+({{{box}}})$)node[above]{${{{rest_col[index]}}}$} -- ({{{box}}});")
+
+    #terms on the diagonal
+    diagonal = [df.loc[f"dy{index}/dt", f"y{index}"] for index in range(len(equations))]
+    for #draw arrows that band under the box
+
+    #upper and lower diagonal of matrix 
+    #check for each element if NONE
+    for 
+        for 
+            if element_upper_number == -element_lower_number #here the strings need to be transforemed to numbers
+                lines.append(f"\draw [->] ({{{box_col}}}) --node[name=z,anchor=north]{${{{element}}}$} ({{{box_row}}});")
+            else:
+                lines.append(f"\draw [->] ($(1.4cm,-0.5cm)+({{{box_col}}})$) --node[name=z,anchor=north]{${{{element}}}$}({{{box_row}}});") #upper diagonal matrix
+                lines.append(f"\draw [<-] ($(1.4cm,-0.5cm)+({{{box_row}}})$) --node[name=z,anchor=north]{${{{element}}}$}({{{box_col}}});") #upper diagonal matrix                                                                                       
 
     lines.append("\\end{tikzpicture}")
     return "\n".join(lines)
