@@ -6,11 +6,15 @@ An interactive command-line tool for systems of ordinary differential equations 
 
 - Python 3.9 or newer
 - The Python packages `numpy`, `pandas`, `sympy` and `matplotlib`
-- For `solve`: the compiled solver `radau.out` in the app folder
+- For `solve`: the solver `radau.out` in the app folder, compiled from `radau.cpp`
 - For `draw`: a LaTeX distribution with `pdflatex` and TikZ, for example MacTeX, TeX Live or MiKTeX
 
 ```bash
 pip install numpy pandas sympy matplotlib
+```
+
+```bash
+c++ -O2 -o radau.out radau.cpp
 ```
 
 ## Getting started
@@ -60,9 +64,10 @@ A system is stored as a JSON file in `Models/`:
 
 | Field | Meaning |
 |---|---|
-| `equations` | The right-hand sides. Entry *i* is dy*i*/dt. Variables are `y1 … yn`, parameters `p1 … pm`. You can use `+ - * /`, `**` for powers, and functions like `sin` or `exp`. |
+| `equations` | The right-hand sides. Entry *i* is dy*i*/dt. Variables are `y1 … yn`, parameters `p1 … pm`, and `t` is the time. You can use `+ - * /`, `**` or `^` for powers, the constants `pi` and `e`, and the functions `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sinh`, `cosh`, `tanh`, `exp`, `log`, `log10` and `sqrt`. |
 | `y0` | The initial values, one per variable |
 | `t_start`, `t_end` | The time interval |
+| `h` | Optional: the solver's step size. The default is (`t_end` − `t_start`) / 1000. |
 | `parameters` | The values of `p1 … pm`, set with `parameters` |
 | `names` | Optional names for the variables, set with `name` |
 
@@ -118,9 +123,19 @@ Shows or changes the parameter values in a system file.
 Solves the loaded system with the Radau solver.
 
 1. Choose a name for the solution file. `.csv` is added if it's missing.
-2. The app runs `./radau.out <system>.json <name>.csv` in the app folder.
+2. The app runs `./radau.out <system>.json <name>.csv` in the app folder. The solver reads `Models/<system>.json` and writes the solution to `solutions/<name>.csv`, creating `solutions/` if needed.
 
 This needs a loaded system and `radau.out` in the app folder.
+
+The solver uses the three-stage Radau IIA method (order 5) with the fixed step size `h` from the system file. If Newton's method doesn't converge in a step, the step size is halved.
+
+> **Warning:** The solver doesn't report an error when it can't solve a system. It stops, and `solve` still says the solution was saved. The solution file then ends at the time where the solver stopped. If the equations can't be evaluated at all, the file contains only the starting values. This happens, for example, when
+>
+> - a parameter in the equations has no value in `"parameters"`,
+> - an equation contains an unknown name or function, for example `abs(y1)`, or
+> - an equation starts with `+`. Write `p1 * y1` instead of `+ p1 * y1`.
+>
+> Check the solution file or the plot after solving. `parameters` followed by `ls` shows which parameters have values.
 
 ### `plot`
 
@@ -174,8 +189,7 @@ Exits the app.
 | `create_matrix_for_eq.py` | Splits each equation into constant, linear and non-linear parts (used by `draw`) |
 | `plot.py` | Plots a solution, one plot per variable. Its `Settings` class sets the plots per row, the figure size and the axis labels. |
 | `radau.out` | The compiled Radau solver |
-| `radau.cpp` | The Radau solver in C++|
-
+| `radau.cpp` | The source code of the solver (C++). It reads the system file, solves it with the Radau IIA method and writes the CSV file. |
 
 ### Adding a command
 
@@ -191,3 +205,11 @@ Every command receives the shared `AppState`:
 | `diagram_path` | The last `.tex` file written by `draw` |
 | `solution_file` | The last solution file written by `solve` |
 | `running` | Set to `False` to exit the app |
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for the full text.
+
+## Author
+
+Fabian Anton Gottfried, [code@fabiangottfried.de](mailto:code@fabiangottfried.de)

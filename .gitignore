@@ -3,6 +3,7 @@ Models/
 Diagrams/
 solutions/
 old_versions/
+Test_env/
 
 # Python caches
 __pycache__/
