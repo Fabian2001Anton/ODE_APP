@@ -47,7 +47,7 @@ def render_tikz(equations, eq_names, settings):
     for index, name in enumerate(variables):
         if pd.isna(const_col.iloc[index]):
             continue
-        lines.append(f"\\draw [->] ($(0.8cm,-1.5cm)+({name})$)node[above]{{{label(const_col.iloc[index])}}} -- ({name});")
+        lines.append(f"\\draw [->] ($(-0.8cm,1.5cm)+({name})$)node[above]{{{label(const_col.iloc[index])}}} -- ({name});")
 
     #the rest terms 
     rest_col = df["rest"]
@@ -74,9 +74,9 @@ def render_tikz(equations, eq_names, settings):
                 lines.append(f"\\draw [->] ({box_col}) --node[name=z,anchor=north]{{{label(element_upper)}}} ({box_row});")
             else:
                 if pd.notna(element_upper):
-                    lines.append(f"\\draw [->] ($(1.4cm,-0.5cm)+({box_col})$) --node[name=z,anchor=north]{{{label(element_upper)}}}({box_row});") #upper diagonal matrix
+                    lines.append(f"\\draw [->] ($({box_col})!0.35!({box_row})!0.5cm!90:({box_row})$) --node[name=z]{{{label(element_upper)}}}({box_row});") #upper diagonal matrix
                 if pd.notna(element_lower):
-                    lines.append(f"\\draw [<-] ($(1.4cm,-0.5cm)+({box_row})$) --node[name=z,anchor=north]{{{label(element_lower)}}}({box_col});") #lower diagonal matrix
+                    lines.append(f"\\draw [->] ($({box_row})!0.35!({box_col})!0.5cm!90:({box_col})$) --node[name=z]{{{label(element_lower)}}}({box_col});") #lower diagonal matrix
 
     lines.append("\\end{tikzpicture}")
     return "\n".join(lines)
@@ -93,10 +93,8 @@ def build_document(system):
     equations = system["equations"]
     settings = Settings()
     d = len(equations)
-    try:
-        names = system["names"]
-    except:
-        names = [f"equation {i+1}" for i in range(d)]
+    names = system.get("names", {})
+    names = [names.get(f"y{i}", f"equation {i}") for i in range(1, d + 1)]
     
     return "\n".join([
         r"\documentclass[border=10pt]{standalone}",

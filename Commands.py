@@ -3,9 +3,10 @@
 import os
 import subprocess
 import json
+import sys
 from pathlib import Path
 
-import Draw
+from draw import build_document
 import Input
 
 from plot import main_plot as plot_sol
@@ -73,6 +74,9 @@ APP_DIR = Path(__file__).resolve().parent
 
 def cmd_solve(state, args):
     """Solve the loaded system."""
+    if state.JSON_name is None:
+        print("  ✗ No system loaded. Run 'input' first.")
+        return
     file_name = "".join(state.JSON_name.split())
     if not file_name.endswith(".json"):
         file_name += ".json"
@@ -81,9 +85,10 @@ def cmd_solve(state, args):
     output_file = Input.ask("The solution will be saved as csv\nChoose a name\nsolve > ", parse_filename_CSV)
     print(output_file)
     try:
-        result = subprocess.run(["./radau.out", file_name, output_file], check=True, cwd=APP_DIR)
-    except:
+        result = subprocess.run(["./radau.out", file_name, output_file], cwd=APP_DIR)
+    except OSError:
         print(f"\nRadau solver could not be imported.\nDoes './radau.out' exist in the directory {APP_DIR}")
+        return
     if result.returncode == 0:
         print(f"Sucessfully saved to {output_file}\n")
         state.solution_file = output_file
@@ -94,9 +99,8 @@ def cmd_solve(state, args):
 
 def cmd_plot(state, args):
     """Plot the solution."""
-    print("\nImport or generate a model first with the commmand 'input'.\nThen generate a solution with solve.")
-    print("\nChoose a solution for {state.JSON_name}\nSee avaliable solutions with 'ls'")
-    folder = "solutions"
+    print(f"\nChoose a solution for {state.JSON_name}\nSee avaliable solutions with 'ls'")
+    folder = Path("solutions")
     try:
         raw = input("\nplot >")
     except (EOFError, KeyboardInterrupt):
@@ -113,48 +117,51 @@ def cmd_plot(state, args):
         print("\nplot failed\nchoose a correct model and solution")
 
 
-def cmd_display(state, args):
-    """Compile a diagram .tex from the Diagrams folder to a PDF and open it."""
-    folder = Path("Diagrams")
-    default = state.diagram_path if state.diagram_path and state.diagram_path.exists() else None
-    hint = f", Enter for '{default.name}'" if default else ""
-    prompt = f"Which .tex file in '{folder}/' should I compile? ('ls' to list{hint}, 'exit' to exit)\ndisplay > "
-    while True:
-        try:
-            raw = input(prompt)
-        except (EOFError, KeyboardInterrupt):
-            print("\nAborted.")
-            return
-        if not raw.strip() and default:
-            path = default
-            break
-        if raw.strip().lower() == "ls":
-            files = sorted(folder.glob("*.tex"))
-            print(("  " + "\n  ".join(f.name for f in files)) if files else f"  (no .tex files in '{folder}/')")
-            print("Exit with 'exit'\n")
-            continue
-        elif raw.strip().lower() == "exit":
-            break
-        try:
-            path = Draw.parse_existing_tex(raw, folder)
-            break
-        except ValueError as exc:
-            print(f"  ✗ {exc} Please try again.\n")
+# def cmd_display(state, args):
+#     """Compile a diagram .tex from the Diagrams folder to a PDF and open it."""
+#     folder = Path("Diagrams")
+#     default = state.diagram_path if state.diagram_path and state.diagram_path.exists() else None
+#     hint = f", Enter for '{default.name}'" if default else ""
+#     prompt = f"Which .tex file in '{folder}/' should I compile? ('ls' to list{hint}, 'exit' to exit)\ndisplay > "
+#     while True:
+#         try:
+#             raw = input(prompt)
+#         except (EOFError, KeyboardInterrupt):
+#             print("\nAborted.")
+#             return
+#         if not raw.strip() and default:
+#             path = default
+#             break
+#         if raw.strip().lower() == "ls":
+#             files = sorted(folder.glob("*.tex"))
+#             print(("  " + "\n  ".join(f.name for f in files)) if files else f"  (no .tex files in '{folder}/')")
+#             print("Exit with 'exit'\n")
+#             continue
+#         elif raw.strip().lower() == "exit":
+#             break
+#         try:
+#             path = Draw.parse_existing_tex(raw, folder)
+#             break
+#         except ValueError as exc:
+#             print(f"  ✗ {exc} Please try again.\n")
 
-    print(f"  Compiling '{path}' ...")
-    try:
-        pdf = Draw.compile_document(path)
-    except ValueError as exc:
-        print(f"  ✗ {exc}")
-        return
-    print(f"  ✓ Built '{pdf}'")
-    try:
-        Draw.open_document(pdf)
-    except ValueError as exc:
-        print(f"  ✗ {exc}")
+#     print(f"  Compiling '{path}' ...")
+#     try:
+#         pdf = Draw.compile_document(path)
+#     except ValueError as exc:
+#         print(f"  ✗ {exc}")
+#         return
+#     print(f"  ✓ Built '{pdf}'")
+#     try:
+#         Draw.open_document(pdf)
+#     except ValueError as exc:
+#         print(f"  ✗ {exc}")
 
 def cmd_name(state, args):
     """Name the equations"""
+    if state.JSON_name is None:
+        print("  ✗ No system loaded. Run 'input' first.")
+        return
     file_name = "".join(state.JSON_name.split())
     path = Input.parse_input_path(file_name, "Models")
     print(f"{file_name} is loaded.\npath: {path}\n")
@@ -187,7 +194,7 @@ def cmd_name(state, args):
             print(f"  ✗ '{variable}' is not a variable (use y1..y{len(variables)}).")
             continue
         if not value:
-            value = f"variables {variable[1:]}"
+            value = f"equation {variable[1:]}"
         updates[variable] = value
         print(f"  ✓ {variable} = \"{value}\"")
 
@@ -205,20 +212,93 @@ def cmd_name(state, args):
 
     data["names"] = full
     if Input.write_json(path, data):
+        state.system["names"] = full
         print(f"  ✓ Names saved to '{path}'")
 
+def parse_tex_filename(raw):
+    name = raw.strip().strip('"').strip("'")
+    if not name:
+        raise ValueError("File name must not be empty.")
+    if not name.lower().endswith(".tex"):
+        name += ".tex"
+    path = Path(name).expanduser()
+    if path.is_dir():
+        raise ValueError(f"'{path}' is a directory.")
+    return path
+
+def compile_document(path):
+    """Diagrams/ivp_diagram.tex -> Diagrams/ivp_diagram.pdf (raises ValueError if it fails)"""
+    try:
+        result = subprocess.run(
+            ["pdflatex", "-interaction=nonstopmode", "-halt-on-error", path.name],
+            cwd=path.parent, capture_output=True, text=True,
+        )
+    except FileNotFoundError:
+        raise ValueError("pdflatex was not found. Is LaTeX installed and on your PATH?") from None
+    if result.returncode != 0:
+        errors = [line for line in result.stdout.splitlines() if line.startswith("!")]
+        reason = errors[0] if errors else f"see '{path.with_suffix('.log')}'"
+        raise ValueError(f"pdflatex failed: {reason}")
+    return path.with_suffix(".pdf")
+
+def open_document(path):
+    """Diagrams/ivp_diagram.pdf -> opens it in the default PDF app (raises ValueError if it fails)"""
+    if not path.exists():
+        raise ValueError(f"'{path}' does not exist.")
+    try:
+        if sys.platform == "win32":                                          # Windows
+            os.startfile(path)
+        else:
+            command = "open" if sys.platform == "darwin" else "xdg-open"     # macOS or Linux
+            subprocess.Popen([command, path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+    except OSError as exc:
+        raise ValueError(f"Could not open '{path}': {exc}") from None
+
+
 def cmd_draw(state, args):
-    """Write a TikZ diagram of the loaded system to a .tex file."""
+    """Write a TikZ diagram of the loaded system to a .tex file and compile it to a PDF."""
     if state.system is None:
         print("  ✗ No system loaded. Run 'input' first.")
         return
-    print()
-    print(Draw.render_tikz(state.system))
-    print()
-    path = Draw.save_document(Draw.build_document(state.system))
-    if path is not None:
-        state.diagram_path = path
-        print(f"  ✓ Diagram saved to '{path}' Press 'Enter' to proceed.")
+    
+    default="ivp_diagram.tex"
+    folder="Diagrams"
+    folder = Path(folder)
+    name = Input.ask(f"Save the diagram as [{default}] or choose a different name:\ndraw > ", parse_tex_filename, default=Path(default))
+    default = Path(default)
+    path = folder / name
+    while path.exists():
+        print(f"  ! '{path}' already exists.")
+        choice = Input.ask("  Overwrite, rename or cancel? [o/r/c]: ", Input.parse_choice)
+        if choice == "o":
+            break
+        if choice == "c":
+            print("Nothing saved.")
+            return None
+        path = folder / Input.ask("  New file name:\ndraw > ", parse_tex_filename)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tex = build_document(state.system)
+        path.write_text(tex, encoding="utf-8")
+    except OSError as exc:
+        print(f"  ✗ Could not write '{path}': {exc}")
+        return None
+
+    state.diagram_path = path
+    print(f"  ✓ Diagram saved to '{path}'")
+    print(f"  Compiling '{path}' ...")
+    try:
+        pdf = compile_document(path)
+    except ValueError as exc:
+        print(f"  ✗ {exc}")
+        return None
+    print(f"  ✓ Built '{pdf}'")
+    try:
+        open_document(pdf)
+    except ValueError as exc:
+        print(f"  ✗ {exc}")
+    print("  Press 'Enter' to proceed.")    
 
 
 def parse_parameter_assignment(raw):
@@ -310,7 +390,6 @@ COMMANDS = {
     "input": cmd_input,
     "solve": cmd_solve,
     "plot": cmd_plot,
-    "display": cmd_display,
     "name": cmd_name,
     "parameters": cmd_parameters,
     "draw": cmd_draw,
